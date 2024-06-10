@@ -88,7 +88,7 @@ class DetectionValidator(BaseValidator):
             self.args.conf,
             self.args.iou,
             labels=self.lb,
-            multi_label=True,
+            multi_label=False,
             agnostic=self.args.single_cls,
             max_det=self.args.max_det,
         )
@@ -269,6 +269,7 @@ class DetectionValidator(BaseValidator):
                     "category_id": self.class_map[int(p[5])],
                     "bbox": [round(x, 3) for x in b],
                     "score": round(p[4], 5),
+                    "logits": p[6:]
                 }
             )
 

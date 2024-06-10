@@ -19,6 +19,6 @@ class YOLOv10DetectionValidator(DetectionValidator):
             return preds
         else:
             preds = preds.transpose(-1, -2)
-            boxes, scores, labels = ops.v10postprocess(preds, self.args.max_det, self.nc)
+            boxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, self.nc)
             bboxes = ops.xywh2xyxy(boxes)
-            return torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1)], dim=-1)
+            return torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
