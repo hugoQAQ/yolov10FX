@@ -851,6 +851,9 @@ def clean_str(s):
 def v10postprocess(preds, max_det, nc=80):
     assert(4 + nc == preds.shape[-1])
     boxes, scores = preds.split([4, nc], dim=-1)
+    if nc not in [6, 80, 20, 10]:
+        nc -= 2
+        scores = scores[:, :, 2:]
     logits = scores
     scores = scores.sigmoid()
 

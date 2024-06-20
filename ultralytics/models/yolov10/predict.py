@@ -7,6 +7,7 @@ from ultralytics.engine.results import Results
 class YOLOv10DetectionPredictor(DetectionPredictor):
     def postprocess(self, preds, img, orig_imgs):
         if isinstance(preds, dict):
+
             preds = preds["one2one"]
 
         if isinstance(preds, (list, tuple)):
@@ -15,9 +16,12 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
         if preds.shape[-1] == 6:
             pass
         else:
-            preds = preds.transpose(-1, -2)
-            bboxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, preds.shape[-1]-4)
-            bboxes = ops.xywh2xyxy(bboxes)
+            if preds.shape[-1] > preds.shape[-2]:
+                preds = preds.transpose(-1, -2) # 1, 24, 9975 -> 1, 9975, 24
+                bboxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, preds.shape[-1]-4)
+                bboxes = ops.xywh2xyxy(bboxes)
+            else:
+                bboxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, preds.shape[-1]-4)
             preds = torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
 
         mask = preds[..., 4] > self.args.conf
