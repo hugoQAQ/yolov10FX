@@ -18,7 +18,10 @@ class YOLOv10DetectionValidator(DetectionValidator):
         if preds.shape[-1] == 6:
             return preds
         else:
-            preds = preds.transpose(-1, -2)
-            boxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, self.nc)
-            bboxes = ops.xywh2xyxy(boxes)
-            return torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
+            if preds.shape[-1] > preds.shape[-2]:
+                preds = preds.transpose(-1, -2)
+                bboxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, self.nc)
+                bboxes = ops.xywh2xyxy(bboxes)
+                return torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
+            else:
+                return preds

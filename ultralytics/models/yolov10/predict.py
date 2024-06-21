@@ -20,9 +20,10 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
                 preds = preds.transpose(-1, -2) # 1, 24, 9975 -> 1, 9975, 24
                 bboxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, preds.shape[-1]-4)
                 bboxes = ops.xywh2xyxy(bboxes)
+                preds = torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
             else:
-                bboxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, preds.shape[-1]-4)
-            preds = torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
+                pass
+            
 
         mask = preds[..., 4] > self.args.conf
         if self.args.classes is not None:
@@ -32,7 +33,7 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
 
         if not isinstance(orig_imgs, list):  # input images are a torch.Tensor, not a list
             orig_imgs = ops.convert_torch2numpy_batch(orig_imgs)
-        nc = logits.shape[-1]
+        nc = preds[0].shape[-1]-6
         results = []
         for i, pred in enumerate(preds):
             orig_img = orig_imgs[i]
