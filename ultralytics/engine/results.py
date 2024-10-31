@@ -94,7 +94,7 @@ class Results(SimpleClass):
         tojson(normalize=False): Converts detection results to JSON format.
     """
 
-    def __init__(self, orig_img, path, names, boxes=None, masks=None, probs=None, keypoints=None, obb=None, logits=None) -> None:
+    def __init__(self, orig_img, path, names, boxes=None, masks=None, probs=None, keypoints=None, obb=None, logits=None, feats=None) -> None:
         """
         Initialize the Results class.
 
@@ -121,6 +121,7 @@ class Results(SimpleClass):
         self.save_dir = None
         self._keys = "boxes", "masks", "probs", "keypoints", "obb"
         self.logits = logits
+        self.feats = feats
 
 
     def __getitem__(self, idx):

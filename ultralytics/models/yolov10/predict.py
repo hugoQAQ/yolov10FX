@@ -7,7 +7,7 @@ from ultralytics.engine.results import Results
 class YOLOv10DetectionPredictor(DetectionPredictor):
     def postprocess(self, preds, img, orig_imgs):
         if isinstance(preds, dict):
-
+            nc = preds['one2many'][0].shape[-2] - 4
             preds = preds["one2one"]
 
         if isinstance(preds, (list, tuple)):
@@ -18,9 +18,9 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
         else:
             if preds.shape[-1] > preds.shape[-2]:
                 preds = preds.transpose(-1, -2) # 1, 24, 9975 -> 1, 9975, 24
-                bboxes, scores, labels, logits = ops.v10postprocess(preds, self.args.max_det, preds.shape[-1]-4)
+                bboxes, scores, labels, logits, feats = ops.v10postprocess(preds, self.args.max_det, nc)
                 bboxes = ops.xywh2xyxy(bboxes)
-                preds = torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
+                preds = torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits, feats], dim=-1)
             else:
                 pass
             
@@ -33,11 +33,10 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
 
         if not isinstance(orig_imgs, list):  # input images are a torch.Tensor, not a list
             orig_imgs = ops.convert_torch2numpy_batch(orig_imgs)
-        nc = preds[0].shape[-1]-6
         results = []
         for i, pred in enumerate(preds):
             orig_img = orig_imgs[i]
             pred[:, :4] = ops.scale_boxes(img.shape[2:], pred[:, :4], orig_img.shape)
             img_path = self.batch[0][i]
-            results.append(Results(orig_img, path=img_path, names=self.model.names, boxes=pred[:, :-nc], logits=pred[:, -nc:]))
+            results.append(Results(orig_img, path=img_path, names=self.model.names, boxes=pred[:, :6], logits=pred[:, 6:nc+6], feats=pred[:, nc+6:]))
         return results

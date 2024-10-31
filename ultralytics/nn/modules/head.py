@@ -45,7 +45,10 @@ class Detect(nn.Module):
     def inference(self, x):
         # Inference path
         shape = x[0].shape  # BCHW
-        x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
+        if shape[1] == self.no:
+            x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
+        else:
+            x_cat = torch.cat([xi.view(shape[0], shape[1], -1) for xi in x], 2)
         if self.dynamic or self.shape != shape:
             self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5))
             self.shape = shape
@@ -54,7 +57,10 @@ class Detect(nn.Module):
             box = x_cat[:, : self.reg_max * 4]
             cls = x_cat[:, self.reg_max * 4 :]
         else:
-            box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
+            if x_cat.shape[1] == self.no:
+                box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
+            else:
+                box, cls, feat = x_cat.split((self.reg_max * 4, self.nc, x_cat.shape[1] - self.nc - self.reg_max * 4), 1)
 
         if self.export and self.format in ("tflite", "edgetpu"):
             # Precompute normalization factor to increase numerical stability
@@ -66,8 +72,10 @@ class Detect(nn.Module):
             dbox = self.decode_bboxes(self.dfl(box) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
         else:
             dbox = self.decode_bboxes(self.dfl(box), self.anchors.unsqueeze(0)) * self.strides
-
-        y = torch.cat((dbox, cls), 1)
+        if x_cat.shape[1] != self.no:
+            y = torch.cat((dbox, cls, feat), 1)
+        else:
+            y = torch.cat((dbox, cls), 1)
         return y if self.export else (y, x)
 
     def forward_feat(self, x, cv2, cv3):
@@ -509,11 +517,15 @@ class v10Detect(Detect):
         self.one2one_cv3 = copy.deepcopy(self.cv3)
     
     def forward(self, x):
+        self.one2one_branch2_outputs = []  # Clear previous outputs
         one2one = self.forward_feat([xi.detach() for xi in x], self.one2one_cv2, self.one2one_cv3)
         if not self.export:
             one2many = super().forward(x)
 
         if not self.training:
+            for i in range(len(one2one)):
+                one2one[i] = torch.cat([one2one[i], self.one2one_branch2_outputs[i]], 1)
+            
             one2one = self.inference(one2one)
             if not self.export:
                 return {"one2many": one2many, "one2one": one2one}
@@ -524,6 +536,18 @@ class v10Detect(Detect):
         else:
             return {"one2many": one2many, "one2one": one2one}
 
+    def forward_feat(self, x, cv2, cv3):
+        y = []
+        for i in range(self.nl):
+            if cv3 is self.one2one_cv3:  # Only save branch2 outputs for one2one path
+                branch2_out = cv3[i][:2](x[i])  # Run through branch1 and branch2
+                self.one2one_branch2_outputs.append(branch2_out)  # Save branch2 output
+                cls_out = cv3[i][2](branch2_out)  # Run through final classification layer
+            else:
+                cls_out = cv3[i](x[i])  # Normal forward pass for one2many
+            y.append(torch.cat((cv2[i](x[i]), cls_out), 1))
+        return y
+    
     def bias_init(self):
         super().bias_init()
         """Initialize Detect() biases, WARNING: requires stride availability."""

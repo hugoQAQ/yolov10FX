@@ -849,10 +849,8 @@ def clean_str(s):
     return re.sub(pattern="[|@#!¡·$€%&()=?¿^*;:,¨´><+]", repl="_", string=s)
 
 def v10postprocess(preds, max_det, nc=80):
-    assert(4 + nc == preds.shape[-1])
-    boxes, scores = preds.split([4, nc], dim=-1)
-    logits = scores
-    scores = scores.sigmoid()
+    boxes, logits, feats = preds.split([4, nc, preds.shape[-1] - nc - 4], dim=-1)
+    scores = logits.sigmoid()
 
     max_scores = scores.amax(dim=-1)
     max_scores, index = torch.topk(max_scores, max_det, dim=-1)
@@ -860,11 +858,12 @@ def v10postprocess(preds, max_det, nc=80):
     boxes = torch.gather(boxes, dim=1, index=index.repeat(1, 1, boxes.shape[-1]))
     scores = torch.gather(scores, dim=1, index=index.repeat(1, 1, scores.shape[-1]))
     logits = torch.gather(logits, dim=1, index=index.repeat(1, 1, logits.shape[-1]))
-
+    feats = torch.gather(feats, dim=1, index=index.repeat(1, 1, feats.shape[-1]))
 
     scores, index = torch.topk(scores.flatten(1), max_det, dim=-1)
     labels = index % nc
     index = index // nc
     boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
     logits = logits.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, logits.shape[-1]))
-    return boxes, scores, labels, logits
+    feats = feats.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, feats.shape[-1])) 
+    return boxes, scores, labels, logits, feats 
