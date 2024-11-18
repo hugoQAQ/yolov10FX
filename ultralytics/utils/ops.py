@@ -848,8 +848,8 @@ def clean_str(s):
     """
     return re.sub(pattern="[|@#!¡·$€%&()=?¿^*;:,¨´><+]", repl="_", string=s)
 
-def v10postprocess(preds, max_det, nc=80):
-    boxes, logits, feats = preds.split([4, nc, preds.shape[-1] - nc - 4], dim=-1)
+def v10postprocess(preds, cv3_feats, max_det, nc=80):
+    boxes, logits = preds.split([4, nc], dim=-1)
     scores = logits.sigmoid()
 
     max_scores = scores.amax(dim=-1)
@@ -858,12 +858,18 @@ def v10postprocess(preds, max_det, nc=80):
     boxes = torch.gather(boxes, dim=1, index=index.repeat(1, 1, boxes.shape[-1]))
     scores = torch.gather(scores, dim=1, index=index.repeat(1, 1, scores.shape[-1]))
     logits = torch.gather(logits, dim=1, index=index.repeat(1, 1, logits.shape[-1]))
-    feats = torch.gather(feats, dim=1, index=index.repeat(1, 1, feats.shape[-1]))
 
+    cv3_branch1_cat = cv3_feats['branch1_outputs'].transpose(-1, -2)
+    cv3_branch2_cat = cv3_feats['branch2_outputs'].transpose(-1, -2)
+    cv3_branch1_cat = cv3_branch1_cat.gather(dim=1, index=index.repeat(1, 1, cv3_branch1_cat.shape[-1]))
+    cv3_branch2_cat = cv3_branch2_cat.gather(dim=1, index=index.repeat(1, 1, cv3_branch2_cat.shape[-1]))
+    
     scores, index = torch.topk(scores.flatten(1), max_det, dim=-1)
     labels = index % nc
     index = index // nc
     boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
     logits = logits.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, logits.shape[-1]))
-    feats = feats.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, feats.shape[-1])) 
-    return boxes, scores, labels, logits, feats 
+
+    cv3_branch1_cat = cv3_branch1_cat.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, cv3_branch1_cat.shape[-1]))
+    cv3_branch2_cat = cv3_branch2_cat.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, cv3_branch2_cat.shape[-1]))
+    return boxes, scores, labels, logits, cv3_branch1_cat, cv3_branch2_cat

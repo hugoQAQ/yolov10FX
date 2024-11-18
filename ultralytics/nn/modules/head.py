@@ -81,7 +81,27 @@ class Detect(nn.Module):
     def forward_feat(self, x, cv2, cv3):
         y = []
         for i in range(self.nl):
-            y.append(torch.cat((cv2[i](x[i]), cv3[i](x[i])), 1))
+            if cv3 is self.one2one_cv3:
+                # Save input
+                input_feat = x[i]
+                self.cv3_inputs.append(input_feat)
+
+                # Process branch1
+                branch1_out = cv3[i][0](input_feat)
+                self.cv3_branch1_outputs.append(branch1_out)
+
+                # Process branch2
+                branch2_out = cv3[i][1](branch1_out)
+                self.cv3_branch2_outputs.append(branch2_out)
+
+                # Process cls_out
+                cls_out = cv3[i][2](branch2_out)
+
+                # Continue as before
+                y.append(torch.cat((cv2[i](x[i]), cls_out), 1))
+            else:
+                cls_out = cv3[i](x[i])
+                y.append(torch.cat((cv2[i](x[i]), cls_out), 1))
         return y
 
     def forward(self, x):
@@ -515,37 +535,61 @@ class v10Detect(Detect):
 
         self.one2one_cv2 = copy.deepcopy(self.cv2)
         self.one2one_cv3 = copy.deepcopy(self.cv3)
+        # Initialize lists to store features
+        self.cv3_branch1_outputs = []
+        self.cv3_branch2_outputs = []
     
     def forward(self, x):
-        self.one2one_branch2_outputs = []  # Clear previous outputs
+        self.cv3_branch1_outputs = []
+        self.cv3_branch2_outputs = []
+        def cat_cv3_features(feats):
+            feats_shape = feats[0].shape
+            return torch.cat([cvi.view(cvi.size(0), feats_shape[1], -1) for cvi in feats], 2)
         one2one = self.forward_feat([xi.detach() for xi in x], self.one2one_cv2, self.one2one_cv3)
+        cv3_branch1_cat = cat_cv3_features(self.cv3_branch1_outputs)
+        cv3_branch2_cat = cat_cv3_features(self.cv3_branch2_outputs)
         if not self.export:
             one2many = super().forward(x)
 
         if not self.training:
-            for i in range(len(one2one)):
-                one2one[i] = torch.cat([one2one[i], self.one2one_branch2_outputs[i]], 1)
-            
             one2one = self.inference(one2one)
             if not self.export:
-                return {"one2many": one2many, "one2one": one2one}
+                return {
+                    "one2many": one2many,
+                    "one2one": one2one,
+                    "cv3_features": {
+                        "branch1_outputs": cv3_branch1_cat,
+                        "branch2_outputs": cv3_branch2_cat
+                    }
+                }
             else:
-                assert(self.max_det != -1)
-                boxes, scores, labels, logits = ops.v10postprocess(one2one.permute(0, 2, 1), self.max_det, self.nc)
-                return torch.cat([boxes, scores.unsqueeze(-1), labels.unsqueeze(-1).to(boxes.dtype), logits], dim=-1)
+                return {"one2one": one2one}
         else:
             return {"one2many": one2many, "one2one": one2one}
 
     def forward_feat(self, x, cv2, cv3):
         y = []
         for i in range(self.nl):
-            if cv3 is self.one2one_cv3:  # Only save branch2 outputs for one2one path
-                branch2_out = cv3[i][:2](x[i])  # Run through branch1 and branch2
-                self.one2one_branch2_outputs.append(branch2_out)  # Save branch2 output
-                cls_out = cv3[i][2](branch2_out)  # Run through final classification layer
+            if cv3 is self.one2one_cv3:
+                # Save input
+                input_feat = x[i]
+
+                # Process branch1
+                branch1_out = cv3[i][0](input_feat)
+                self.cv3_branch1_outputs.append(branch1_out)
+
+                # Process branch2
+                branch2_out = cv3[i][1](branch1_out)
+                self.cv3_branch2_outputs.append(branch2_out)
+
+                # Process cls_out
+                cls_out = cv3[i][2](branch2_out)
+
+                # Continue as before
+                y.append(torch.cat((cv2[i](x[i]), cls_out), 1))
             else:
-                cls_out = cv3[i](x[i])  # Normal forward pass for one2many
-            y.append(torch.cat((cv2[i](x[i]), cls_out), 1))
+                cls_out = cv3[i](x[i])
+                y.append(torch.cat((cv2[i](x[i]), cls_out), 1))
         return y
     
     def bias_init(self):
