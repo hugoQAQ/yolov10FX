@@ -49,7 +49,7 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
             logits = pred[:, 6:]
             branch1_feats = cv3_branch1_cat[i]
             branch2_feats = cv3_branch2_cat[i]
-            mask_feats = cv3_mask_cat[i].cpu().numpy().flatten().tolist()
+            mask_feats = cv3_mask_cat[i].flatten()
             results.append(Results(orig_img, 
                                  path=img_path, 
                                  names=self.model.names, 
