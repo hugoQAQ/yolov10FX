@@ -542,12 +542,14 @@ class v10Detect(Detect):
     def forward(self, x):
         self.cv3_branch1_outputs = []
         self.cv3_branch2_outputs = []
+        self.cv3_mask = []
         def cat_cv3_features(feats):
             feats_shape = feats[0].shape
             return torch.cat([cvi.view(cvi.size(0), feats_shape[1], -1) for cvi in feats], 2)
         one2one = self.forward_feat([xi.detach() for xi in x], self.one2one_cv2, self.one2one_cv3)
         cv3_branch1_cat = cat_cv3_features(self.cv3_branch1_outputs)
         cv3_branch2_cat = cat_cv3_features(self.cv3_branch2_outputs)
+        cv3_mask_cat = cat_cv3_features(self.cv3_mask)
         if not self.export:
             one2many = super().forward(x)
 
@@ -559,7 +561,8 @@ class v10Detect(Detect):
                     "one2one": one2one,
                     "cv3_features": {
                         "branch1_outputs": cv3_branch1_cat,
-                        "branch2_outputs": cv3_branch2_cat
+                        "branch2_outputs": cv3_branch2_cat,
+                        "head_idx": cv3_mask_cat
                     }
                 }
             else:
@@ -569,15 +572,14 @@ class v10Detect(Detect):
 
     def forward_feat(self, x, cv2, cv3):
         y = []
+        head_idx_list = []
         for i in range(self.nl):
             if cv3 is self.one2one_cv3:
                 # Save input
                 input_feat = x[i]
-
                 # Process branch1
                 branch1_out = cv3[i][0](input_feat)
                 self.cv3_branch1_outputs.append(branch1_out)
-
                 # Process branch2
                 branch2_out = cv3[i][1](branch1_out)
                 self.cv3_branch2_outputs.append(branch2_out)
@@ -587,6 +589,9 @@ class v10Detect(Detect):
 
                 # Continue as before
                 y.append(torch.cat((cv2[i](x[i]), cls_out), 1))
+                self.cv3_mask.append(torch.full((branch1_out.shape[0], 1, *branch1_out.shape[2:]), 
+                                      fill_value=i, 
+                                      device=branch1_out.device))
             else:
                 cls_out = cv3[i](x[i])
                 y.append(torch.cat((cv2[i](x[i]), cls_out), 1))

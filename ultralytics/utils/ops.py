@@ -861,8 +861,10 @@ def v10postprocess(preds, cv3_feats, max_det, nc=80):
 
     cv3_branch1_cat = cv3_feats['branch1_outputs'].transpose(-1, -2)
     cv3_branch2_cat = cv3_feats['branch2_outputs'].transpose(-1, -2)
+    cv3_mask_cat = cv3_feats['head_idx'].transpose(-1, -2)
     cv3_branch1_cat = cv3_branch1_cat.gather(dim=1, index=index.repeat(1, 1, cv3_branch1_cat.shape[-1]))
     cv3_branch2_cat = cv3_branch2_cat.gather(dim=1, index=index.repeat(1, 1, cv3_branch2_cat.shape[-1]))
+    cv3_mask_cat = cv3_mask_cat.gather(dim=1, index=index.repeat(1, 1, cv3_mask_cat.shape[-1]))
     
     scores, index = torch.topk(scores.flatten(1), max_det, dim=-1)
     labels = index % nc
@@ -872,4 +874,5 @@ def v10postprocess(preds, cv3_feats, max_det, nc=80):
 
     cv3_branch1_cat = cv3_branch1_cat.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, cv3_branch1_cat.shape[-1]))
     cv3_branch2_cat = cv3_branch2_cat.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, cv3_branch2_cat.shape[-1]))
-    return boxes, scores, labels, logits, cv3_branch1_cat, cv3_branch2_cat
+    cv3_mask_cat = cv3_mask_cat.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, cv3_mask_cat.shape[-1]))
+    return boxes, scores, labels, logits, cv3_branch1_cat, cv3_branch2_cat, cv3_mask_cat

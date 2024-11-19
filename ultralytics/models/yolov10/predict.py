@@ -23,7 +23,7 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
         else:
             if preds.shape[-1] > preds.shape[-2]:
                 preds = preds.transpose(-1, -2)
-                bboxes, scores, labels, logits, cv3_branch1_cat, cv3_branch2_cat = ops.v10postprocess(preds, cv3_feats, self.args.max_det, nc)
+                bboxes, scores, labels, logits, cv3_branch1_cat, cv3_branch2_cat, cv3_mask_cat = ops.v10postprocess(preds, cv3_feats, self.args.max_det, nc)
                 bboxes = ops.xywh2xyxy(bboxes)
                 preds = torch.cat([bboxes, scores.unsqueeze(-1), labels.unsqueeze(-1), logits], dim=-1)
             else:
@@ -36,6 +36,7 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
         preds = [p[mask[idx]] for idx, p in enumerate(preds)]
         cv3_branch1_cat = [p[mask[idx]] for idx, p in enumerate(cv3_branch1_cat)]
         cv3_branch2_cat = [p[mask[idx]] for idx, p in enumerate(cv3_branch2_cat)]
+        cv3_mask_cat = [p[mask[idx]] for idx, p in enumerate(cv3_mask_cat)]
 
         if not isinstance(orig_imgs, list):  # input images are a torch.Tensor, not a list
             orig_imgs = ops.convert_torch2numpy_batch(orig_imgs)
@@ -48,11 +49,13 @@ class YOLOv10DetectionPredictor(DetectionPredictor):
             logits = pred[:, 6:]
             branch1_feats = cv3_branch1_cat[i]
             branch2_feats = cv3_branch2_cat[i]
+            mask_feats = cv3_mask_cat[i].cpu().numpy().flatten().tolist()
             results.append(Results(orig_img, 
                                  path=img_path, 
                                  names=self.model.names, 
                                  boxes=pred[:, :6], 
                                  logits=logits, 
                                  feats={"branch1_outputs": branch1_feats, 
-                                       "branch2_outputs": branch2_feats}))
+                                       "branch2_outputs": branch2_feats,
+                                       "head_idx": mask_feats}))
         return results
